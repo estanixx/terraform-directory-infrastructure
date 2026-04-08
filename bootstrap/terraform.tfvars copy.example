@@ -1,0 +1,11 @@
+aws_region        = "us-east-1"
+state_bucket_name = "replace-with-global-unique-terraform-state-bucket"
+lock_table_name   = "terraform-state-locks"
+
+github_org = "replace-with-github-org-or-user"
+github_repo = "05-tf-directory"
+
+ci_role_name        = "github-actions-terraform"
+github_environment  = "production"
+
+ssm_password_parameter_name = "/platform/tf-directory/simple-ad-password"

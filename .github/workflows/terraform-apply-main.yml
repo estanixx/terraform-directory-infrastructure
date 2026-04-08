@@ -1,0 +1,98 @@
+name: Terraform Apply (main)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - ".github/workflows/terraform-*.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-apply-main
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  AWS_REGION: us-east-1
+
+jobs:
+  terraform-apply:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: gh-apply-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init (S3 backend)
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=05-tf-directory/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        env:
+          TF_VAR_simple_ad_password_ssm_parameter_name: ${{ secrets.SIMPLE_AD_PASSWORD_SSM_PARAMETER_NAME }}
+        run: |
+          set +e
+          terraform plan -no-color -detailed-exitcode -out=tfplan > plan.txt
+          ec=$?
+          set -e
+
+          if [ "$ec" -eq 1 ]; then
+            echo "Terraform plan failed"
+            cat plan.txt
+            exit 1
+          fi
+
+          if [ "$ec" -eq 2 ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Terraform Apply
+        if: steps.plan.outputs.has_changes == 'true'
+        env:
+          TF_VAR_simple_ad_password_ssm_parameter_name: ${{ secrets.SIMPLE_AD_PASSWORD_SSM_PARAMETER_NAME }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Add apply summary
+        run: |
+          {
+            echo "## Terraform Apply"
+            echo
+            echo "Has changes: ${{ steps.plan.outputs.has_changes }}"
+            if [ "${{ steps.plan.outputs.has_changes }}" = "true" ]; then
+              echo "Apply executed after environment approval."
+            else
+              echo "No infrastructure changes; apply skipped."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
