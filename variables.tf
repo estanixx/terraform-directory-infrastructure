@@ -105,7 +105,7 @@ variable "simple_ad_password" {
   nullable    = true
 
   validation {
-    condition     = var.simple_ad_password == null || length(var.simple_ad_password) >= 8
+    condition     = try(length(var.simple_ad_password), 0) >= 8 || var.simple_ad_password == null
     error_message = "If set, simple_ad_password must be at least 8 characters."
   }
 }
