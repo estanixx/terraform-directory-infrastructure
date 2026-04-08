@@ -36,6 +36,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.6.0
+          terraform_wrapper: false
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -55,6 +56,22 @@ jobs:
 
       - name: Terraform Validate
         run: terraform validate
+
+      - name: State diagnostics
+        id: state
+        run: |
+          set +e
+          terraform state list > state.txt
+          ec=$?
+          set -e
+          if [ "$ec" -ne 0 ]; then
+            echo "state_count=unknown" >> "$GITHUB_OUTPUT"
+            echo "terraform state list did not return resources (exit $ec)"
+          else
+            count=$(wc -l < state.txt | tr -d ' ')
+            echo "state_count=$count" >> "$GITHUB_OUTPUT"
+            echo "Current managed resource count: $count"
+          fi
 
       - name: Terraform Plan
         id: plan
@@ -99,6 +116,7 @@ jobs:
           {
             echo "## Terraform Apply"
             echo
+            echo "Managed resource count before plan: ${{ steps.state.outputs.state_count }}"
             echo "Has changes: ${{ steps.plan.outputs.has_changes }}"
             echo "Plan exit code: ${{ steps.plan.outputs.plan_exit_code }}"
             echo
