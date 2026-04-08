@@ -64,9 +64,12 @@ jobs:
           TF_VAR_simple_ad_password_ssm_parameter_name: ${{ secrets.SIMPLE_AD_PASSWORD_SSM_PARAMETER_NAME }}
         run: |
           set +e
-          terraform plan -no-color -detailed-exitcode -out=tfplan > plan.txt
+          terraform plan -no-color -detailed-exitcode -var-file=ci.auto.tfvars -out=tfplan > plan.txt
           ec=$?
           set -e
+
+          echo "plan_exit_code=$ec" >> "$GITHUB_OUTPUT"
+          echo "Terraform plan exit code: $ec"
 
           if [ "$ec" -eq 1 ]; then
             echo "Terraform plan failed"
@@ -80,12 +83,20 @@ jobs:
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Upload plan artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-pr-${{ github.run_id }}
+          path: plan.txt
+
       - name: Add plan summary
         run: |
           {
             echo "## Terraform Plan"
             echo
             echo "Has changes: ${{ steps.plan.outputs.has_changes }}"
+            echo "Plan exit code: ${{ steps.plan.outputs.plan_exit_code }}"
             echo
             echo "<details><summary>Show plan output</summary>"
             echo

@@ -131,6 +131,8 @@ terraform plan
 - Pushes to `main` run `.github/workflows/terraform-apply-main.yml`.
 - Both workflows authenticate to AWS via OIDC (`AssumeRoleWithWebIdentity`).
 - Apply runs only after GitHub Environment `production` approval.
+- CI plans use `ci.auto.tfvars` for non-sensitive inputs because `terraform.tfvars` is gitignored.
+- The Simple AD password source is still injected in CI via `TF_VAR_simple_ad_password_ssm_parameter_name`.
 
 ## Availability Notes
 
